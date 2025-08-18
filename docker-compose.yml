@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: 123
+    volumes:
+      - ./docker/postgres:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  redis:
+    image: redis:6
+    container_name: redis
+    restart: always
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: 12345678
+    volumes:
+      - ./docker/minio:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web UI
+    networks:
+      - backend
+
+  django:
+    build: ./django
+    container_name: django
+    restart: always
+    command: gunicorn api.wsgi -b 0.0.0.0:8000 -w 3 --log-level info --reload --timeout 3600
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./django:/app
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: 123
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: 12345678
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    networks:
+      - backend
+
+  weasyprint:
+    # curl -F "html=@tests/index.html" http://localhost:8080 -o test.pdf
+    image: 4teamwork/weasyprint
+    container_name: weasyprint
+    ports:
+      - 8080:8080
+    environment:
+      - WEASYPRINT_ALLOWED_URLS_PATTERN=*
+    volumes:
+      - ./docker/weasyprint:/files
+    networks:
+      - backend
+  
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./django/static:/static:ro
+    depends_on:
+      - django
+    networks:
+      - backend
+      - frontend
+
+networks:
+  frontend:
+  backend:

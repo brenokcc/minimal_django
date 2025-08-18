@@ -1,0 +1,6 @@
+Django
+gunicorn
+django-redis
+psycopg2-binary
+minio
+django-storages[boto3]
